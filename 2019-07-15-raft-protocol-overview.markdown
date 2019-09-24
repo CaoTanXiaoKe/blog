@@ -1,5 +1,5 @@
 ---
-Areslayout:     post
+layout:     post
 title:      "Raft协议解读"
 subtitle:   "对Raft协议的论文进行简单解读"
 date:       2019-07-15
@@ -17,7 +17,9 @@ Raft协议是目前使用非常广泛的分布式共识协议， 它有和paxos�
 
  [In Search of an Understandable Consensus Algorithm (Extended Version)](https://raft.github.io/raft.pdf)
 
-​					(哪里有什么捷径，论文还是需要反反复复的读)
+​
+(哪里有什么捷径，论文还是需要反反复复的读)
+
 
 ### raft协议架构
 
@@ -64,6 +66,16 @@ Raft协议是目前使用非常广泛的分布式共识协议， 它有和paxos�
 3. 如果收到超过半数的节点(包括leader本身)返回复制日志成功。 在状态机中应用该日志，并且进行提交。
 4. leader广播所有follower节点进行执行状态机应用日志和提交日志。
 5. 如果超过一半的节点成功提交日志，leader给客户端返回请求成功。
+=======
+占坑
+
+## Raft协议概述
+
+## Raft协议论文
+
+## 选主
+
+## 日志拷贝
 
 ## 安全性
 
