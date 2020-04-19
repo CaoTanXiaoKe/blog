@@ -1,0 +1,625 @@
+---
+layout:     post
+title:      "Golang编译链接的原理和手册: go build"
+subtitle:   "简单概述Golang编译链接的原理，以及提供go build手册"
+date:       2019-11-05
+author:     "ChenWenKe"
+tags:
+	- Golang
+	- 编译原理
+mathjax: true
+
+---
+
+
+
+
+
+>    一切都应该尽可能的简单，但也不能简单过了头。
+>
+> ​  —— 阿尔伯特·爱因斯坦
+
+
+
+​    
+
+​        该文档主要包含两个部分: Golang编译链接的原理及go build手册。前者的目的是简单概述编译和链接的过程中，编译器和链接器依次都做了些什么事情，从而帮助理解和选用后面手册中的各个选项。
+
+
+
+### Golang 编译链接的原理
+
+​        通常情况下，我们不需要了解编译链接的过程，也能写出正确的业务代码。嗯，诚然如此。但简单的了解编译链接的过程，将帮助我们编写出更加优雅，高效的代码，也能促进我们对编程本身及计算机系统的理解。
+
+#### 为什么需要编译链接?
+
+<img src="/blog/img/phases_of_compiler.png" alt="img" style="zoom:60%;" />
+
+​        作为合格的程序员，我们编写的都是非常易于人类阅读的文本代码，但是机器却更易于“理解”严格的二进制指令。为了把我们写的文本代码，转化成机器所需要的机器指令，就需要编译和链接。
+
+![img](/blog/img/go_build_compile_link_phases.png)
+
+#### golang编译链接的过程
+
+​        通常情况下，在Linux系统中我们敲入 go build hello.go就会生成一个文件名为hello的ELF(可链接可执行)目标文件，通常这就是我们所期望的行为。
+
+​        现在，为了简单了解go build编译链接的过程，现在我们对go build 指定一些选项，拆解一下编译链接的过程。实例文件如下: 
+
+```
+// filename: hello.go
+package main
+import "fmt"
+func main() {
+  fmt.Println("Hello bytedance!")
+}
+```
+
+- 执行命令显示编译链接的过程： go build -v -x -work -o hello hello.go
+
+    - -v： 打印所编译的包的名字
+
+    - -x： 打印编译期间所执行的命令
+
+    - -work: 打印编译期间用于存放中间文件的临时目录，并且编译结束时不删除
+
+```
+$ go build -v -x -work -o hello hello.go
+# <1>. 创建一个临时目录用于存放中间文件。
+WORK=/var/folders/tr/gchfnnhs1qv02fx6ltlhyrmm0000gp/T/go-build779679109
+command-line-arguments
+mkdir -p $WORK/b001/
+# <2>. 将我们的main package编译时所依赖的两个package: fmt.a 和 runtime.a写入import配置文件。
+cat >$WORK/b001/importcfg << 'EOF' # internal
+# import config
+packagefile fmt=/usr/local/go/pkg/darwin_amd64/fmt.a
+packagefile runtime=/usr/local/go/pkg/darwin_amd64/runtime.a
+EOF
+# <3>. 调用compile编译器程序(即: go tool compile工具) 编译我们的代码hello.go及它所依赖的库形成了一个_pkg_.a归档目标文件。传递给compile各参数的含义, 可以参考 go tool compile --help 或下面的手册。
+cd /Users/chenwenke/WorkSpace/Golang/Test/src/Test
+/usr/local/go/pkg/tool/darwin_amd64/compile -o $WORK/b001/_pkg_.a -trimpath "$WORK/b001=>" -p main -complete -buildid YtZ7Sb3LxFVBcFrjFuc0/YtZ7Sb3LxFVBcFrjFuc0 -goversion go1.13.1 -D _/Users/chenwenke/WorkSpace/Golang/Test/src/Test -importcfg $WORK/b001/importcfg -pack -c=4 ./hello.go
+/usr/local/go/pkg/tool/darwin_amd64/buildid -w $WORK/b001/_pkg_.a # internal
+cp $WORK/b001/_pkg_.a /Users/chenwenke/Library/Caches/go-build/71/719f297cae2dc7a19eb99d0cfa832314c96ad24a5a1c87790e38b4366e5f3377-d # internal
+# <4>. 将_pkg_.a链接时所依赖的归档目标文件写入链接import配置文件。
+cat >$WORK/b001/importcfg.link << 'EOF' # internal
+packagefile command-line-arguments=$WORK/b001/_pkg_.a
+packagefile fmt=/usr/local/go/pkg/darwin_amd64/fmt.a
+packagefile runtime=/usr/local/go/pkg/darwin_amd64/runtime.a
+packagefile errors=/usr/local/go/pkg/darwin_amd64/errors.a
+packagefile internal/fmtsort=/usr/local/go/pkg/darwin_amd64/internal/fmtsort.a
+packagefile io=/usr/local/go/pkg/darwin_amd64/io.a
+packagefile math=/usr/local/go/pkg/darwin_amd64/math.a
+packagefile os=/usr/local/go/pkg/darwin_amd64/os.a
+packagefile reflect=/usr/local/go/pkg/darwin_amd64/reflect.a
+packagefile strconv=/usr/local/go/pkg/darwin_amd64/strconv.a
+packagefile sync=/usr/local/go/pkg/darwin_amd64/sync.a
+packagefile unicode/utf8=/usr/local/go/pkg/darwin_amd64/unicode/utf8.a
+packagefile internal/bytealg=/usr/local/go/pkg/darwin_amd64/internal/bytealg.a
+packagefile internal/cpu=/usr/local/go/pkg/darwin_amd64/internal/cpu.a
+packagefile runtime/internal/atomic=/usr/local/go/pkg/darwin_amd64/runtime/internal/atomic.a
+packagefile runtime/internal/math=/usr/local/go/pkg/darwin_amd64/runtime/internal/math.a
+packagefile runtime/internal/sys=/usr/local/go/pkg/darwin_amd64/runtime/internal/sys.a
+packagefile internal/reflectlite=/usr/local/go/pkg/darwin_amd64/internal/reflectlite.a
+packagefile sort=/usr/local/go/pkg/darwin_amd64/sort.a
+packagefile sync/atomic=/usr/local/go/pkg/darwin_amd64/sync/atomic.a
+packagefile math/bits=/usr/local/go/pkg/darwin_amd64/math/bits.a
+packagefile internal/oserror=/usr/local/go/pkg/darwin_amd64/internal/oserror.a
+packagefile internal/poll=/usr/local/go/pkg/darwin_amd64/internal/poll.a
+packagefile internal/syscall/unix=/usr/local/go/pkg/darwin_amd64/internal/syscall/unix.a
+packagefile internal/testlog=/usr/local/go/pkg/darwin_amd64/internal/testlog.a
+packagefile syscall=/usr/local/go/pkg/darwin_amd64/syscall.a
+packagefile time=/usr/local/go/pkg/darwin_amd64/time.a
+packagefile unicode=/usr/local/go/pkg/darwin_amd64/unicode.a
+packagefile internal/race=/usr/local/go/pkg/darwin_amd64/internal/race.a
+EOF
+mkdir -p $WORK/b001/exe/
+# <5>. 调用link链接器程序(即: go tool link)，链接我们编译阶段生成的归档文件_pkg_.a以及它所依赖的内置库和golang 基础库的.a文件。*.a文件其实是对.o文件的归档，这个阶段的.o文件通常被称为可重定位的目标文件。
+cd .
+/usr/local/go/pkg/tool/darwin_amd64/link -o $WORK/b001/exe/a.out -importcfg $WORK/b001/importcfg.link -buildmode=exe -buildid=tNWmwtvtCprwoQA0Wvod/YtZ7Sb3LxFVBcFrjFuc0/zhj6nar6NtzO4LnuLq83/tNWmwtvtCprwoQA0Wvod -extld=clang $WORK/b001/_pkg_.a
+/usr/local/go/pkg/tool/darwin_amd64/buildid -w $WORK/b001/exe/a.out # internal
+# <6>. 重命名 a.out 为我们指定的目标文件名 hello 并且移动到当前目录下。
+mv $WORK/b001/exe/a.out hello
+```
+
+​       
+
+​        通过以上拆解，可以很容易的发现，go build分别调用了编译器(.../tool/os_arc/compile)和链接器(.../tool/os_arc/link)，分别来完成编译和链接的操作。以下是对编译期间所做的事情，以及链接期间所做的事情的简单概述。更详细的信息，请参考: [《深入理解计算机系统》(第七章 Linking)](https://piazza.com/class_profile/get_resource/j7ly9riuca97on/ja86xbbpp0b73b), [《编译原理》(龙书)](/blog/img/CompilersPrinciples,Techinques,AndTools,2ndEditionAddisonWesley-Aho,Sethi,Ullman.pdf)。
+
+![img](/blog/img/typical_ELF_relocatable_object_file.png)
+
+​                                                                        *(Typical ELF relocatable object file)*
+
+- 编译：编译阶段逻辑上其实可以细分为**预处理**，**编译**，**汇编**三个阶段。整个编译阶段就是通过词法分析，语法分析和语义分析，把文本代码翻译成可重定位的目标文件(.o文件)的过程, 如上图。其中，编译优化也发生在这个阶段。
+
+    - 预处理: 例如: 解析依赖库。
+
+    - 编译：将预处理后的代码，翻译成汇编代码(.s文件)。
+
+    - 汇编：将生成的汇编代码，翻译成可重定位的目标文件(.o文件，relocatable object file)。注意，目标文件纯粹就是字节块的集合。
+
+- 链接：链接阶段主要是通过**符号解析**和**重定位**把编译阶段生成的.o文件，链接生成可执行目标文件。
+
+    - 符号解析：目标文件定义和引用符号。符号解析的目的是将每个符号引用和一个符号定义联系起来。
+
+    - 重定位：编译阶段生成的代码和数据节都是从地址零开始的，链接器通过把每个符号定义与一个存储器位置联系起来，然后修改所有对这些符号的引用，使得它们指向这个存储器位置，从而重定向这些节(section)。进而生成可执行目标文件，如下图。
+
+![img](/blog/img/typical_ELF_executable_object_file.png)
+
+   
+
+​        关于特定于golang语言，包依赖和并行编译的相关信息可以参考[《Go命令教程》](https://github.com/hyper0x/go_command_tutorial/blob/master/0.1.md)
+
+
+
+#### 编译器优化
+
+​        易于程序员阅读的代码表述方式，直接严格翻译成相应的机器码对机器来说往往比较低效(因为包含太多的冗余信息)。Golang的编译器默认做了很多编译优化的工作，例如引用的包必须使用，声明的变量必须使用，内联函数，逃逸分析，无用代码消减等。理解编译器所做的优化工作，有助于我们编写更高效的代码以及进行更加深入的调试：
+
+- 内联函数: 
+
+    - 由于函数调用有一些固定的开销，例如函数调用栈和抢占检查(preemption check), 所以对于一些代码行比较少的函数，编译器倾向于把它们在编译时展开，这种行为被称为内联。
+
+    - 内联函数的缺点： 由于函数被展开了，无法设置断点，使得调试变得很困难。
+
+    - 查看编译器的优化决策可以使用选项: -gcflags=-m，也可以使用-gcflags=-l选项禁止编译器内联优化。更多内联函数信息可参考《Effective C++》相关章节。
+
+- 逃逸分析(escape analysis): 
+
+    - 通常情况下，从栈上分配内存要比从堆中分配内存高效的多(可参考《深入理解计算机系统》虚拟存储器相关章节)，对于golang来说，从goroutine的stack上分配内存比从堆上分配内存要高效的多，因为stack上的内存无需garbage collect。
+    
+    - 从stack上分配的内存和从heap上分配的内存对于程序来说，主要区别在于生命周期的不同，因此只要编译器能够正确地判断出一个变量/对象的生命周期，就能“正确”地选择为这个变量/对象在stack还是heap上分配内存。Go 编译器会自动给超出函数生命周期的变量，在heap上分配内存，这个行为被称为: 逃逸到堆(the value *escapes* to the heap)。
+
+    - 可以通过编译选项: -gcflags=-m查看编译器的逃逸(escape)优化决策。
+
+- 削减无用代码(*dead code elimination*): 
+
+    - 删除无用代码即通过代码静态分析工具，删除不可达的代码分支，或者移除无用的循环。
+
+    - 结合这项功能和build tags条件编译选项，可以优雅的屏蔽一些开销比较大的debug逻辑分支。
+
+​    关于golang编译器优化的更多信息可以查看 [High Performace Go Workshop](https://dave.cheney.net/high-performance-go-workshop/gopherchina-2019.html#compiler-optimisation) 和 [Compiler Optimizations。](https://github.com/golang/go/wiki/CompilerOptimizations)
+
+
+
+### go build 手册
+
+​        这一部分主要是对go help build, go tool asm --help, go tool compile --help，go tool link --help文档的直接翻译，其中对一些常用的选项进行了标注和信息补充。
+
+#### 参数介绍
+
+- **GOOS=linux && GOARCH=amd64 && go build main.go： 跨平台编译**
+
+- -o: 指定生成目标文件存放的位置
+
+- -i: 安装生成目标文件所需要的packages
+
+- -a : 强制重编 package, 即使上次编译的package是最新的(package没更改)
+
+- -n: 打印编译时所用到的命令，但是不真正执行。
+
+- -p n: 开启并发编译，默认情况下默认值是CPU的逻辑核数
+
+- **-race: 开启竞态检测(支持linux/amd64, freebsd/amd64, darwin/amd64 and windows/amd64环境)**
+
+- -mscan: 启用和内存清理程序的互操作(支持环境：linux/amd64, linux/arm64 并且使用Clang/LLVM作为C编译器)
+
+- -v: 编译时显示包名
+
+- -work: 打印临时工作目录，并且即使退出了也不删除这些目录。
+
+- -x: 打印编译时用到的命令，注意该选项和-n选项的区别。
+
+- -asmflags '[pattern=]arg list'：其实是给go tool asm的参数，查看文档: go tool asm --help
+
+    - -D: 重新定义符号
+
+    - -I: 包含目录(include dir)
+
+    - -S: 打印汇编码和机器码
+
+    - -V: 打印版本信息并退出
+
+    - -debug：转储已解析的指令
+
+    - -dylink: 动态链接，支持引用定义在go共享库里的符号
+
+    - -e: 显示详细错误(不限制错误信息的行数)
+
+    - -gensymabis: 把ABI信息写入文件，不进行汇编。
+
+    - -o: 生成 .o文件
+
+    - -shared: 生成共享库代码
+
+    - -trimpath： 删除与机器文件系统相关的路径前缀(例如: /usr/username等等)
+
+- -buildmode： 指示构建(build)什么类型的目标文件，查看文档：go help buildmode
+
+    - -buildmode=archive: 构建non-main packages成 .a 文件(静态库)
+
+    - -buildmode=c-archive：构建 main package 以及它所import的packages成C 静态库。
+
+    - -buildmode=c-shared： 构建C共享库
+
+    - **-buildmode=default：       -buildmode选项的默认参数，把main packages构建成可执行文件，non-main packages构建成 .a 静态库。**
+
+    - -buildmode=shared： 把所有non-main packages构建成一个go 共享库，可以使用-linkshared选项进行链接。
+
+    - -buildmode=exe： 把 main packages以及它import的任何文件，构建成可执行文件。
+
+    - -buildmode=pie： 把 main packages以及它impiort的任何文件，构建成位置无关的目标文件(可重定位文件)
+
+    - -buildmode=plugin：把 main packages以及它import其他packages，构建成一个go plugin.
+
+- -compiler name: 指定要使用的编译器(gc或gccgo， gc为Golang自带的编译器，gccgo是GCC提供的Golang编译器)
+
+- -gccgoflags '[pattern=]arg list': 其实是给 gccgo 的编译器/链接器的参数
+
+- -gcflags '[pattern=]arg list'： 其实是给go tool compile 的参数, 查看文档：go tool compile --help
+
+    - -%: 调试非静态初始化器(debug non-static initializers)
+
+    - -+：编译 go runtime
+
+    - -B：禁用边界检查
+
+    - -C：禁用错误消息中的列打印
+
+    - **-D path：设置local import的相对路径** 
+
+    - -E 调试符号表导出
+
+    - **-I directory：添加 import的搜索路径**
+
+    - -K：调试缺少的行号
+
+    - -L：在错误消息中显示文件的全路径
+
+    - **-N：禁止编译优化**
+    
+    - -S：打印汇编码
+
+    - -V：打印版本号并退出
+
+    - -W：类型检查之后调试解析树
+
+    - -asmhdr file：把汇编头(assemply header)写进文件file
+
+    - -bench file：把benchmark时间添加到文件file
+
+    - -blockprofile file：把 阻塞(block) profile信息写进文件file
+
+    - -buildid id: 设置构建ID，写进导出的元信息中 (record id as the build id in the export metadata)
+
+    - -c int：指定编译时期的并发数量，1表示无并发(默认是1)
+
+    - -complete：编译完整的软件包(无C和汇编代码)
+
+    - -cpuprofile file: 写 cpu profile到file
+
+    - -d list: 打印列表中iterm的调试信息(debug information about items in list)
+
+    - -dwarf: 生成 DWARF符号(默认开启)
+
+    - -dwarfbasentries：使用DWARF中的基地址选择条目(use base address selection entries in DWARF)
+
+    - -dwarflocationlists：在优化模式下将位置列表添加到DWARF(默认开启)
+
+    - -dynlink: 引用在其他go 共享库里定义的符号
+
+    - **-e：显示详细错误信息，不限制错误信息行数**
+
+    - -gendwarfinl int：生成DWARF内联信息记录(默认是 2)
+
+    - -goversion string: 所需的运行时版本
+
+    - -h：在遇到错误时停止
+
+    - -importcfg file：从file中读取import配置信息
+
+    - -importmap definition：添加source=actual形式的定义到 import map
+
+    - -installsuffix suffix: 设置 pkg目录前缀
+
+    - -j：调试运行时初始化的(runtime-initialized)变量。
+
+    - **-l：禁止内联**
+
+      - -gcflags=-l: 禁止内联
+
+      - 不指定该选项: 开启一般的内联优化
+
+      - -gcflags='-l -l': 开启level 2的内联优化，内联优化更加激进，有可能能优化目标文件执行速度，也有可能生成更大的二进制文件。
+
+       - -gcflags='-l -l -l': 开启level3的内联优化，更加更加激进，目标文件可能执行的更快，一定会生成更大的二进制文件，而且还可能引入bug。
+
+       - -gcflags=-l=4(4个l), Go 1.11中将开启处于试验阶段的[mid-stack inlining优化](https://github.com/golang/go/issues/19348#issuecomment-393654429)。
+
+     - -lang string： release to compile for
+
+     - -linkobj file：将链接器特定的对象写入文件file
+
+    - -live: 调试活性(liveness)分析
+
+    - **-m：打印优化决策**
+
+    - -memprofile file：将memory profile写入文件file
+
+    - -memprofilerate rate：设置runtime.MemProfileRate为rate
+
+    - -mutexprofile file: 将mutex profile写入文件file
+
+    - **-newescape: 开启 new escape分析(默认开启)，具体含义参考上面编译优化部分“逃逸分析”。**
+
+    - -nolocalimports: 禁止本地(相对)路径import
+
+    - -o file: 将生成的目标文件写到file
+
+    - **-p path: 设置包导入路径**
+
+    - -pack：构建目标文件成 .a文件而非.o文件
+
+    - -r: 调试生成的包装器
+
+    - **-race： 开启竞态检测**
+
+    - -s: 警告可以简化的复合文字
+
+    - -shared: 生成共享库
+
+    - -smallframes：减小栈分配对象的大小上限
+
+    - -std： 编译标准库
+
+    - -symabis file：从文件file读取ABIs符号信息
+
+    - -traceprofile file: 将执行trace信息写入文件file
+
+    - -trimpath prefix: 从记录的源代码文件中删除 prefix文件路径前缀
+
+    - **-v: 增加显示调试信息的详细程度**
+
+    - -w: 调试类型检查
+
+    - -wb: 启用写屏障(默认开启)
+
+- -installsuffix suffix: 设置目标文件安装目录的前缀
+
+- -ldflags '[pattern=]arg list'： 其实是给go tool link的参数，查看文档: go tool link --help
+
+    - -B note: 使用ELF时，添加一个ELF NT_GNU_BUILD_ID note
+
+    - -E entry: 设置entry符号名
+
+    - -H type: 设置头类型
+
+    - -I linker: 指定linker为ELF动态链接器
+
+    - -L directory：添加指定路径是库路径
+
+    - -R quantum：设置地址舍入限额(默认-1)
+
+    - -T address: 设置文本(text)段地址(默认-1)
+
+    - -V: 打印版本信息并退出
+
+    - **-X definition: 添加形式为importpath.name=value的字符串值定义**
+
+    - -a: 分开显示
+
+    - -buildid id：指定id为toolchain 的build id。
+
+    - -buildmode mode：设置构建模式
+
+    - -c：转储调用图(dump call graph)
+
+    - -compressdwarf：尽可能压缩DWARF(默认开启)
+
+    - -cpuprofile file：将cpu profile信息写入文件file。
+
+    - -d：禁用动态可执行文件
+
+    - -debugtramp int: debug trampolines
+
+    - -dumpdep: 转储符号依赖图(dump symbol dependency graph)
+
+    - -extar string: 归档buildmode=c-archive的程序
+
+    - -extld linker：指定在external mode下使用的链接器
+
+    - -extldflags flags：给external 链接器传参
+
+    - -f：忽略版本不匹配
+
+    - -g：禁用go package日期检查
+
+    - -h：遇到错误时停止
+
+    - -importcfg file：从file中读取import 配置信息
+
+    - -installsuffix suffix：设置包目录前缀
+
+    - -k symbol: 设置field跟踪符号
+
+    - -libgcc string: 开启编译器支持的库进行内部链接(使用"none"进行禁用)
+
+    - -linkmode mode: 设置链接模式
+
+    - -linkshared: 链接Go共享库
+
+    - -memprofile file：将memory profile信息写入file
+
+    - -memprofilerate rate: 设置runtime.MemProfileRate为rate值
+
+    - -msan：开启MScan接口(enable MSan interface)
+
+    - -n 转储符号表(dump symbol table)
+
+    - -o file: 把构建成的目标文件写入file
+
+    - -pluginpath string：指定插件的全路径
+
+    - -r path: 设置ELF动态链接器搜索path
+
+    - **-race: 开启竞态检查**
+
+    - -s 禁用符号表
+
+    - -strictdups int：在读取目标文件期间进行完整性检查，检查重复的符号内容(1=warn 2=err)。
+
+    - -tmpdir directory: 指定存放定时文件的目录
+
+    - -u：拒绝不安全的packages
+
+    - -v：打印链接trace
+
+    - -w：禁止生成 DWARF
+
+- -linkshared: 链接使用-buildmode=shared选项构建的go共享库。
+
+- **-mod mode： 指定module的使用方式(readonly或者vendor)**
+
+- **-pkdir dir: 从指定dir安装加载packages，可以覆盖标准配置。**
+
+- **-tags tag,list: 可用于条件编译**
+
+- -trimpath：删除目标文件中文件系统相关的路径前缀。
+
+- -toolexec: 用于调用调用链程序(例如: vet， asm)
+
+
+
+#### 几个典型的case:
+
+##### **跨平台编译**
+
+```
+$ # 编译成linux下的可执行目标文件(ELF)
+$ GOOS=linux go build -o hello hello.go
+$ file hello
+hello: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, not stripped
+$
+$ # 编译成OSX (MAC)下的可执行文件(Mach-O)
+$ GOOS=darwin go build -o hello hello.go
+$ file hello
+hello: Mach-O 64-bit executable x86_64
+$
+$ # 编译成Windows下的可执行文件(PE)
+$ GOOS=windows go build -o hello hello.go
+$ file hello
+hello: PE32+ executable (console) x86-64 (stripped to external PDB), for MS Windows
+```
+
+
+
+##### 条件编译
+
+- 使用条件编译屏蔽Debug代码:
+
+编写两个配置文件: config.go和config_debug.go
+
+```
+*// filename: config.go*
+*// +build !debug*
+package build
+const DEBUG=false
+*// filename: config_debug.go*
+*// +build debug*
+package build
+const DEBUG = true
+```
+
+业务相关的文件假定是 hello.go
+
+
+```
+package main
+import (
+  "fmt"
+  "Test/build"
+)
+func printMyTags() {
+  if (build.DEBUG){
+   fmt.Println("Debug Mode.")
+  } else {
+   fmt.Println("Not Debug Mode.")
+  }
+}
+func main() {
+  fmt.Println("Hello bytedance!")
+  printMyTags()
+}
+```
+
+在编译代码时指定-tags=debug 即可开启debug分支的开关；况且由于内联优化的存在，没开启的开关会在编译时舍弃，完全不影响程序效率。
+
+
+
+##### 编译时指定常量
+
+通过编译时指定常量的值，也可以实现条件编译的目的，编写hello.go文件如下
+
+```
+// filename: hello.go
+package main
+import "fmt"
+var DEBUG = "NO"
+func main() {
+  fmt.Printf("Debug Mode is on? %s!\n", DEBUG)
+}
+```
+
+
+
+##### 减小编译的可执行程序的大小
+
+```
+$ go build -ldflags '-w -s' 
+$ # -w 禁止生成debug信息，注意使用该选项后，无法使用gdb进行调试
+$ # -s 禁用符号表
+$ # 可以使用 go tool link --help 查看ldflags各参数的含义
+```
+
+
+
+##### 禁止编译优化和内联
+
+```
+$ go build -gcflags '-N -l' 
+$ # -N 禁止编译优化
+$ # -l 禁止内联，禁止内联也可以一定程度上减少可执行程序大小。多个 -l，会更疯狂的减少内联，可能会破坏runtime.Callers
+$ # 可以使用 go tool compile --help 查看gcflags各参数的含义
+```
+
+
+
+### 总结
+
+​    本文主要概述了Golang程序编译链接的过程，同时翻译了相应的go build手册。通常情况下，就我们应用层开发而言，go build工具已经为我们提供了一个很好的抽象，屏蔽了复杂而繁琐的编译链接过程。但世事瞬息万变，[抽象层往往最终都会泄漏](https://www.joelonsoftware.com/2002/11/11/the-law-of-leaky-abstractions/)，但愿在你遇到相关麻烦时，本文能为你提供一些微小的帮助。 暂时就写这么多吧。
+
+
+
+> Less Is More.
+
+
+
+
+
+### 参考资料
+
+- [Go 程序是怎样跑起来的](https://cloud.tencent.com/developer/article/1457274)
+
+- [ComilerOptimizations](https://github.com/golang/go/wiki/CompilerOptimizations)
+
+- [heigh performance go workshop](https://dave.cheney.net/high-performance-go-workshop/gopherchina-2019.html#history_of_the_go_compiler)
+
+- [《深入理解计算机系统》3th](https://piazza.com/class_profile/get_resource/j7ly9riuca97on/ja86xbbpp0b73b)
+
+- [《编译原理》(龙书)](/blog/img/CompilersPrinciples,Techinques,AndTools,2ndEditionAddisonWesley-Aho,Sethi,Ullman.pdf)
+
+- [《Go命令教程》](https://github.com/hyper0x/go_command_tutorial/blob/master/0.1.md)
+
+- 《Effective C++》
+
+- [The Law of Leaky Abstractions](https://www.joelonsoftware.com/2002/11/11/the-law-of-leaky-abstractions/)
+
+- [Introduction to the Go compiler](https://github.com/golang/go/tree/master/src/cmd/compile)
